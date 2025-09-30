@@ -8,6 +8,8 @@ This project demonstrates a complete hardware-software co-design implementing th
 
 <img width="1536" height="1024" alt="Nexys4ddr pc connection" src="https://github.com/user-attachments/assets/7aab482b-1bf6-4ccd-aa76-2aeb8c392909" />
 
+# video 
+https://youtu.be/MyGipVWWlUo?si=ZkjwUBh9VSqU-p0I
 
 # Key Features
 Sobel Implementation: 
