@@ -17,7 +17,7 @@ Sobel Implementation:
 * GUI: Modern Python interface with live visualization
 * Binary Edge Output: Thresholded edge map for clear edge detection
 # System Architecture 
-<img width="1352" height="712" alt="sobel_architecture" src="https://github.com/user-attachments/assets/0165f8b4-f33c-4269-ae86-65776bb5e8c6" />
+<img width="1231" height="684" alt="Architecture" src="https://github.com/user-attachments/assets/8e0ef835-1c85-4a96-8aa6-4e678c1ad59a" />
 
 # Sobel Algorithm Implementation
 * Mathematical Foundation
