@@ -1,0 +1,24 @@
+
+## Clock signal - 100MHz system clock
+set_property -dict { PACKAGE_PIN E3    IOSTANDARD LVCMOS33 } [get_ports { CLK100MHZ }];
+create_clock -add -name sys_clk_pin -period 10.00 -waveform {0 5} [get_ports {CLK100MHZ}];
+
+## Reset button - CPU Reset button
+set_property -dict { PACKAGE_PIN C12   IOSTANDARD LVCMOS33 } [get_ports { CPU_RESETN }];
+
+## USB-UART Interface - For image data communication
+set_property -dict { PACKAGE_PIN C4    IOSTANDARD LVCMOS33 } [get_ports { UART_TXD_IN }];
+set_property -dict { PACKAGE_PIN D4    IOSTANDARD LVCMOS33 } [get_ports { UART_RXD_OUT }];
+
+## Configuration options - Required for proper operation
+set_property CONFIG_VOLTAGE 3.3 [current_design]
+set_property CFGBVS VCCO [current_design]
+
+## Timing constraints - UART communication timing
+set_input_delay -clock [get_clocks sys_clk_pin] -min -add_delay 1.000 [get_ports UART_TXD_IN]
+set_input_delay -clock [get_clocks sys_clk_pin] -max -add_delay 2.000 [get_ports UART_TXD_IN]
+set_output_delay -clock [get_clocks sys_clk_pin] -min -add_delay -1.000 [get_ports UART_RXD_OUT]
+set_output_delay -clock [get_clocks sys_clk_pin] -max -add_delay 1.000 [get_ports UART_RXD_OUT]
+
+## False paths - Reset signal doesn't need strict timing
+set_false_path -from [get_ports CPU_RESETN] -to [all_registers]
