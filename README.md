@@ -6,6 +6,9 @@
 # Project Overview
 This project demonstrates a complete hardware-software co-design implementing the Sobel edge detection algorithm on FPGA hardware. The system achieves 95,936 pixels/second processing speed by leveraging parallel computation capabilities of the Xilinx Artix-7 FPGA.
 
+<img width="1536" height="1024" alt="Nexys4ddr pc connection" src="https://github.com/user-attachments/assets/7aab482b-1bf6-4ccd-aa76-2aeb8c392909" />
+
+
 # Key Features
 Sobel Implementation: 
 * Proper 3×3 convolution with Gx and Gy gradient kernels
