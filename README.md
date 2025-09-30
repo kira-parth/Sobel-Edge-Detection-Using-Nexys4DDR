@@ -16,27 +16,27 @@ Sobel Implementation:
 # System Architecture 
 <img width="1352" height="712" alt="sobel_architecture" src="https://github.com/user-attachments/assets/0165f8b4-f33c-4269-ae86-65776bb5e8c6" />
 # Sobel Algorithm Implementation
-*Mathematical Foundation
-*The FPGA implements the Sobel operator using two 3×3 convolution kernels:
-*Horizontal Gradient (Gx):
-*[-1  0  +1]
-*[-2  0  +2]
-*[-1  0  +1]
-*Vertical Gradient (Gy):
-*[-1  -2  -1]
-*[ 0   0   0]
-*[+1  +2  +1]
-*Gradient Magnitude: |G| = |Gx| + |Gy| (Manhattan distance)
-*Edge Decision:
-*If |G| > 80: Pixel = 255 (white edge)
-*Otherwise: Pixel = 0 (black background)
+* Mathematical Foundation
+* The FPGA implements the Sobel operator using two 3×3 convolution kernels:
+* Horizontal Gradient (Gx):
+* [-1  0  +1]
+* [-2  0  +2]
+* [-1  0  +1]
+* Vertical Gradient (Gy):
+* [-1  -2  -1]
+* [ 0   0   0]
+* [ +1  +2  +1]
+* Gradient Magnitude: |G| = |Gx| + |Gy| (Manhattan distance)
+* Edge Decision:
+* If |G| > 80: Pixel = 255 (white edge)
+* Otherwise: Pixel = 0 (black background)
 
 # Implementation Details
-Hardware (Verilog HDL)
-The FPGA implementation consists of:
+* Hardware (Verilog)
+* The FPGA implementation consists of:
 
-UART Communication Module: Handles serial data transfer
-Image Buffer: 65,536 bytes Block RAM for input image
-Edge Buffer: 65,536 bytes Block RAM for output edges
-Sobel Processor: Parallel computation of gradients
-State Machine: Controls processing flow
+* UART Communication Module: Handles serial data transfer
+* Image Buffer: 65,536 bytes Block RAM for input image
+* Edge Buffer: 65,536 bytes Block RAM for output edges
+* Sobel Processor: Parallel computation of gradients
+* State Machine: Controls processing flow
