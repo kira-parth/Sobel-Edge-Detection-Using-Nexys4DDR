@@ -8,10 +8,10 @@ This project demonstrates a complete hardware-software co-design implementing th
 
 # Key Features
 Sobel Implementation: 
-.Proper 3×3 convolution with Gx and Gy gradient kernels
-.Hardware Acceleration: 42ms processing time for 256×256 images
-.Real-time Communication: UART interface at 115200 baud rate
-.GUI: Modern Python interface with live visualization
-.Binary Edge Output: Thresholded edge map for clear edge detection
+. Proper 3×3 convolution with Gx and Gy gradient kernels
+. Hardware Acceleration: 42ms processing time for 256×256 images
+. Real-time Communication: UART interface at 115200 baud rate
+. GUI: Modern Python interface with live visualization
+. Binary Edge Output: Thresholded edge map for clear edge detection
 # System Architecture 
 <img width="1352" height="712" alt="sobel_architecture" src="https://github.com/user-attachments/assets/0165f8b4-f33c-4269-ae86-65776bb5e8c6" />
