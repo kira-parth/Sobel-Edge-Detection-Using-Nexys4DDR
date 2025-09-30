@@ -15,6 +15,7 @@ Sobel Implementation:
 * Binary Edge Output: Thresholded edge map for clear edge detection
 # System Architecture 
 <img width="1352" height="712" alt="sobel_architecture" src="https://github.com/user-attachments/assets/0165f8b4-f33c-4269-ae86-65776bb5e8c6" />
+
 # Sobel Algorithm Implementation
 * Mathematical Foundation
 * The FPGA implements the Sobel operator using two 3×3 convolution kernels:
