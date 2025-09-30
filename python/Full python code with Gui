@@ -1,0 +1,692 @@
+#!/usr/bin/env python3
+"""
+Professional FPGA Image Processor - Modern GUI Design
+LinkedIn-worthy interface with professional styling and UX
+"""
+
+import cv2
+import numpy as np
+import serial
+import serial.tools.list_ports
+import time
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+import threading
+import os
+from PIL import Image, ImageTk
+
+class ProfessionalFPGAProcessor:
+    def __init__(self):
+        self.serial_port = None
+        self.is_connected = False
+        self.current_rgb_image = None
+        self.current_gray_image = None
+        self.processed_image = None
+        self.processing = False
+        
+        # FPGA specifications
+        self.FPGA_SIZE = (256, 256)
+        self.FPGA_BYTES = 256 * 256
+        
+        self.setup_professional_gui()
+        self.find_serial_ports()
+        
+    def setup_professional_gui(self):
+        """Setup modern, professional GUI interface"""
+        self.root = tk.Tk()
+        self.root.title("FPGA Edge Detection ")
+        self.root.geometry("1400x900")
+        self.root.configure(bg='#f0f0f0')
+        
+        # Configure modern styling
+        self.setup_styles()
+        
+        # Main container with padding
+        main_container = tk.Frame(self.root, bg='#f0f0f0')
+        main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Header section
+        self.create_header(main_container)
+        
+        # Content area with three panels
+        content_frame = tk.Frame(main_container, bg='#f0f0f0')
+        content_frame.pack(fill=tk.BOTH, expand=True, pady=(20, 0))
+        
+        # Left panel - Controls
+        self.create_control_panel(content_frame)
+        
+        # Right panel - Results
+        self.create_results_panel(content_frame)
+        
+        # Status bar
+        self.create_status_bar(main_container)
+        
+    def setup_styles(self):
+        """Configure modern color scheme and fonts"""
+        self.colors = {
+            'primary': '#2c3e50',      # Dark blue
+            'secondary': '#3498db',     # Light blue  
+            'success': '#27ae60',       # Green
+            'warning': '#f39c12',       # Orange
+            'danger': '#e74c3c',        # Red
+            'light': '#ecf0f1',         # Light gray
+            'dark': '#34495e',          # Dark gray
+            'white': '#ffffff',
+            'accent': '#9b59b6'         # Purple
+        }
+        
+        self.fonts = {
+            'heading': ('Segoe UI', 24, 'bold'),
+            'subheading': ('Segoe UI', 14, 'bold'),
+            'body': ('Segoe UI', 10),
+            'small': ('Segoe UI', 8)
+        }
+        
+        # Configure ttk styles
+        style = ttk.Style()
+        style.theme_use('clam')
+        
+        # Custom button style
+        style.configure('Modern.TButton',
+                       background=self.colors['primary'],
+                       foreground='white',
+                       borderwidth=0,
+                       focuscolor='none',
+                       padding=(20, 10))
+        style.map('Modern.TButton',
+                 background=[('active', self.colors['secondary'])])
+        
+        # Success button style
+        style.configure('Success.TButton',
+                       background=self.colors['success'],
+                       foreground='white',
+                       borderwidth=0,
+                       padding=(15, 8))
+        
+        # Modern frame style
+        style.configure('Card.TFrame',
+                       background=self.colors['white'],
+                       relief='flat',
+                       borderwidth=1)
+        
+    def create_header(self, parent):
+        """Create professional header section"""
+        header_frame = tk.Frame(parent, bg=self.colors['primary'], height=80)
+        header_frame.pack(fill=tk.X, pady=(0, 20))
+        header_frame.pack_propagate(False)
+        
+        # Title and subtitle
+        title_frame = tk.Frame(header_frame, bg=self.colors['primary'])
+        title_frame.pack(expand=True, fill=tk.BOTH)
+        
+        title_label = tk.Label(title_frame, 
+                              text="FPGA Edge Detection ",
+                              font=self.fonts['heading'],
+                              bg=self.colors['primary'],
+                              fg='white')
+        title_label.pack(pady=(15, 5))
+        
+        subtitle_label = tk.Label(title_frame,
+                                 text="Hardware-Accelerated Image Processing Platform",
+                                 font=self.fonts['body'],
+                                 bg=self.colors['primary'],
+                                 fg=self.colors['light'])
+        subtitle_label.pack()
+        
+    def create_control_panel(self, parent):
+        """Create left control panel"""
+        control_frame = tk.Frame(parent, bg='#f0f0f0', width=400)
+        control_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 20))
+        control_frame.pack_propagate(False)
+        
+        # Connection card
+        self.create_connection_card(control_frame)
+        
+        # Image processing card
+        self.create_processing_card(control_frame)
+        
+        # Statistics card
+        self.create_stats_card(control_frame)
+        
+    def create_connection_card(self, parent):
+        """Create modern connection interface"""
+        card = tk.Frame(parent, bg=self.colors['white'], relief='raised', bd=1)
+        card.pack(fill=tk.X, pady=(0, 20), ipady=15, ipadx=15)
+        
+        # Card header
+        header = tk.Label(card, text="FPGA Connection",
+                         font=self.fonts['subheading'],
+                         bg=self.colors['white'],
+                         fg=self.colors['primary'])
+        header.pack(anchor='w', pady=(0, 15))
+        
+        # Connection status indicator
+        status_frame = tk.Frame(card, bg=self.colors['white'])
+        status_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        self.status_indicator = tk.Label(status_frame, text="●", 
+                                        font=('Segoe UI', 16),
+                                        fg=self.colors['danger'],
+                                        bg=self.colors['white'])
+        self.status_indicator.pack(side=tk.LEFT)
+        
+        self.connection_status = tk.Label(status_frame, text="Disconnected",
+                                         font=self.fonts['body'],
+                                         bg=self.colors['white'],
+                                         fg=self.colors['dark'])
+        self.connection_status.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Port selection
+        port_frame = tk.Frame(card, bg=self.colors['white'])
+        port_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        tk.Label(port_frame, text="COM Port:",
+                font=self.fonts['body'],
+                bg=self.colors['white'],
+                fg=self.colors['dark']).pack(anchor='w')
+        
+        port_select_frame = tk.Frame(port_frame, bg=self.colors['white'])
+        port_select_frame.pack(fill=tk.X, pady=(5, 0))
+        
+        self.port_var = tk.StringVar()
+        self.port_combo = ttk.Combobox(port_select_frame, textvariable=self.port_var, 
+                                      state='readonly', width=15)
+        self.port_combo.pack(side=tk.LEFT)
+        
+        refresh_btn = ttk.Button(port_select_frame, text="⟳", width=3,
+                               command=self.find_serial_ports)
+        refresh_btn.pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Connection button
+        self.connect_btn = ttk.Button(card, text="Connect to FPGA",
+                                     style='Modern.TButton',
+                                     command=self.toggle_connection)
+        self.connect_btn.pack(fill=tk.X, pady=(10, 0))
+        
+        # Hardware specs
+        specs_label = tk.Label(card, text="Specifications: 256×256 processing, 65,536 bytes",
+                              font=self.fonts['small'],
+                              bg=self.colors['white'],
+                              fg=self.colors['dark'])
+        specs_label.pack(pady=(10, 0))
+        
+    def create_processing_card(self, parent):
+        """Create image processing interface"""
+        card = tk.Frame(parent, bg=self.colors['white'], relief='raised', bd=1)
+        card.pack(fill=tk.X, pady=(0, 20), ipady=15, ipadx=15)
+        
+        # Card header
+        header = tk.Label(card, text="Image Processing",
+                         font=self.fonts['subheading'],
+                         bg=self.colors['white'],
+                         fg=self.colors['primary'])
+        header.pack(anchor='w', pady=(0, 15))
+        
+        # File selection
+        self.file_btn = ttk.Button(card, text="📁 Select Image",
+                                  style='Modern.TButton',
+                                  command=self.browse_image)
+        self.file_btn.pack(fill=tk.X, pady=(0, 10))
+        
+        # File info
+        self.file_info = tk.Label(card, text="No image selected",
+                                 font=self.fonts['body'],
+                                 bg=self.colors['white'],
+                                 fg=self.colors['dark'],
+                                 wraplength=350)
+        self.file_info.pack(anchor='w', pady=(0, 10))
+        
+        # Process button
+        self.process_btn = ttk.Button(card, text="🚀 Process with FPGA",
+                                     style='Success.TButton',
+                                     command=self.process_image,
+                                     state=tk.DISABLED)
+        self.process_btn.pack(fill=tk.X, pady=(10, 0))
+        
+        # Progress section
+        progress_frame = tk.Frame(card, bg=self.colors['white'])
+        progress_frame.pack(fill=tk.X, pady=(15, 0))
+        
+        self.progress = ttk.Progressbar(progress_frame, length=350, mode='determinate')
+        self.progress.pack(fill=tk.X)
+        
+        self.progress_text = tk.Label(progress_frame, text="Ready",
+                                     font=self.fonts['small'],
+                                     bg=self.colors['white'],
+                                     fg=self.colors['dark'])
+        self.progress_text.pack(pady=(5, 0))
+        
+    def create_stats_card(self, parent):
+        """Create statistics display"""
+        card = tk.Frame(parent, bg=self.colors['white'], relief='raised', bd=1)
+        card.pack(fill=tk.X, ipady=15, ipadx=15)
+        
+        # Card header
+        header = tk.Label(card, text="Processing Statistics",
+                         font=self.fonts['subheading'],
+                         bg=self.colors['white'],
+                         fg=self.colors['primary'])
+        header.pack(anchor='w', pady=(0, 15))
+        
+        # Stats grid
+        stats_frame = tk.Frame(card, bg=self.colors['white'])
+        stats_frame.pack(fill=tk.X)
+        
+        # Image size stat
+        self.create_stat_item(stats_frame, "Image Size", "Not loaded", 0)
+        self.create_stat_item(stats_frame, "Processing Time", "0.0s", 1)
+        self.create_stat_item(stats_frame, "Data Transferred", "0 KB", 2)
+        
+    def create_stat_item(self, parent, label, value, row):
+        """Create individual statistic item"""
+        tk.Label(parent, text=label + ":",
+                font=self.fonts['small'],
+                bg=self.colors['white'],
+                fg=self.colors['dark']).grid(row=row, column=0, sticky='w', pady=2)
+        
+        value_label = tk.Label(parent, text=value,
+                              font=self.fonts['small'],
+                              bg=self.colors['white'],
+                              fg=self.colors['secondary'])
+        value_label.grid(row=row, column=1, sticky='e', padx=(10, 0), pady=2)
+        
+        # Store references for updating
+        if not hasattr(self, 'stat_labels'):
+            self.stat_labels = {}
+        self.stat_labels[label] = value_label
+        
+    def create_results_panel(self, parent):
+        """Create modern results visualization"""
+        results_frame = tk.Frame(parent, bg='#f0f0f0')
+        results_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        
+        # Results header
+        header_frame = tk.Frame(results_frame, bg=self.colors['white'], height=60)
+        header_frame.pack(fill=tk.X, pady=(0, 10))
+        header_frame.pack_propagate(False)
+        
+        results_title = tk.Label(header_frame, text="Processing Results",
+                                font=self.fonts['subheading'],
+                                bg=self.colors['white'],
+                                fg=self.colors['primary'])
+        results_title.pack(pady=15)
+        
+        # Image display area
+        display_frame = tk.Frame(results_frame, bg=self.colors['white'], relief='raised', bd=1)
+        display_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        
+        # Create matplotlib figure with modern styling
+        plt.style.use('default')
+        self.fig = Figure(figsize=(12, 8), facecolor='white')
+        self.fig.suptitle('FPGA Edge Detection Pipeline', fontsize=16, fontweight='bold', color=self.colors['primary'])
+        
+        # Create subplots with modern layout
+        gs = self.fig.add_gridspec(2, 2, height_ratios=[3, 1], hspace=0.3, wspace=0.2)
+        self.ax_original = self.fig.add_subplot(gs[0, 0])
+        self.ax_processed = self.fig.add_subplot(gs[0, 1])
+        self.ax_info = self.fig.add_subplot(gs[1, :])
+        
+        # Style the subplots
+        for ax in [self.ax_original, self.ax_processed]:
+            ax.set_xticks([])
+            ax.set_yticks([])
+            
+        self.ax_original.set_title('Original Image', fontsize=12, color=self.colors['dark'], pad=20)
+        self.ax_processed.set_title('FPGA Edge Detection', fontsize=12, color=self.colors['dark'], pad=20)
+        
+        # Info panel for processing details
+        self.ax_info.axis('off')
+        
+        self.canvas = FigureCanvasTkAgg(self.fig, display_frame)
+        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Action buttons
+        button_frame = tk.Frame(results_frame, bg='#f0f0f0')
+        button_frame.pack(fill=tk.X)
+        
+        save_btn = ttk.Button(button_frame, text="💾 Save Result",
+                             style='Modern.TButton',
+                             command=self.save_results)
+        save_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        clear_btn = ttk.Button(button_frame, text="🗑️ Clear",
+                              command=self.clear_results)
+        clear_btn.pack(side=tk.LEFT)
+        
+        # Initialize with placeholder
+        self.show_placeholder()
+        
+    def create_status_bar(self, parent):
+        """Create bottom status bar"""
+        status_frame = tk.Frame(parent, bg=self.colors['primary'], height=30)
+        status_frame.pack(fill=tk.X, pady=(20, 0))
+        status_frame.pack_propagate(False)
+        
+        self.status_text = tk.Label(status_frame, text="Ready • FPGA Edge Detection Studio v1.0",
+                                   font=self.fonts['small'],
+                                   bg=self.colors['primary'],
+                                   fg='white')
+        self.status_text.pack(side=tk.LEFT, padx=10, pady=5)
+        
+    def show_placeholder(self):
+        """Show professional placeholder content"""
+        self.ax_original.clear()
+        self.ax_processed.clear()
+        self.ax_info.clear()
+        
+        # Styled placeholders
+        self.ax_original.text(0.5, 0.5, '📁\n\nSelect an image\nto begin processing',
+                             ha='center', va='center', transform=self.ax_original.transAxes,
+                             fontsize=14, color=self.colors['dark'], alpha=0.6)
+        
+        self.ax_processed.text(0.5, 0.5, '⚡\n\nFPGA processed result\nwill appear here',
+                              ha='center', va='center', transform=self.ax_processed.transAxes,
+                              fontsize=14, color=self.colors['dark'], alpha=0.6)
+        
+        self.ax_original.set_title('Original Image', fontsize=12, color=self.colors['dark'], pad=20)
+        self.ax_processed.set_title('FPGA Edge Detection', fontsize=12, color=self.colors['dark'], pad=20)
+        
+        # Info panel
+        info_text = "Hardware-accelerated edge detection using Sobel operators\nProcessing resolution: 256×256 pixels • Algorithm: Binary threshold Sobel filter"
+        self.ax_info.text(0.5, 0.5, info_text, ha='center', va='center',
+                         transform=self.ax_info.transAxes, fontsize=10,
+                         color=self.colors['dark'], alpha=0.7)
+        
+        for ax in [self.ax_original, self.ax_processed]:
+            ax.set_xticks([])
+            ax.set_yticks([])
+            
+        self.ax_info.axis('off')
+        self.canvas.draw()
+        
+    def find_serial_ports(self):
+        """Find available serial ports"""
+        ports = [port.device for port in serial.tools.list_ports.comports()]
+        self.port_combo['values'] = ports
+        if ports:
+            self.port_combo.set(ports[0])
+            
+    def toggle_connection(self):
+        """Toggle FPGA connection"""
+        if not self.is_connected:
+            self.connect_to_fpga()
+        else:
+            self.disconnect_from_fpga()
+            
+    def connect_to_fpga(self):
+        """Connect to FPGA with visual feedback"""
+        port = self.port_var.get()
+        if not port:
+            messagebox.showerror("Connection Error", "Please select a COM port first!")
+            return
+            
+        try:
+            self.serial_port = serial.Serial(port=port, baudrate=115200, timeout=10)
+            time.sleep(2)
+            self.serial_port.reset_input_buffer()
+            self.serial_port.reset_output_buffer()
+            
+            self.is_connected = True
+            self.status_indicator.config(fg=self.colors['success'])
+            self.connection_status.config(text="Connected", fg=self.colors['success'])
+            self.connect_btn.config(text="Disconnect")
+            self.status_text.config(text=f"Connected to FPGA on {port} • Ready for processing")
+            self.update_ui_state()
+            
+        except serial.SerialException as e:
+            messagebox.showerror("Connection Failed", f"Could not connect to {port}:\n{str(e)}")
+            
+    def disconnect_from_fpga(self):
+        """Disconnect from FPGA"""
+        if self.serial_port:
+            self.serial_port.close()
+            self.serial_port = None
+            
+        self.is_connected = False
+        self.status_indicator.config(fg=self.colors['danger'])
+        self.connection_status.config(text="Disconnected", fg=self.colors['danger'])
+        self.connect_btn.config(text="Connect to FPGA")
+        self.status_text.config(text="Disconnected • Select COM port and connect to begin")
+        self.update_ui_state()
+        
+    def browse_image(self):
+        """Browse for image with modern interface"""
+        filetypes = [
+            ("Image files", "*.jpg *.jpeg *.png *.bmp *.tiff *.tif"),
+            ("All files", "*.*")
+        ]
+        
+        filename = filedialog.askopenfilename(
+            title="Select Image for FPGA Processing",
+            filetypes=filetypes
+        )
+        
+        if filename:
+            try:
+                # Load and process image
+                self.current_rgb_image = cv2.imread(filename, cv2.IMREAD_COLOR)
+                if self.current_rgb_image is None:
+                    raise ValueError("Could not read image file")
+                    
+                gray_image = cv2.cvtColor(self.current_rgb_image, cv2.COLOR_BGR2GRAY)
+                self.current_gray_image = cv2.resize(gray_image, self.FPGA_SIZE, interpolation=cv2.INTER_AREA)
+                
+                # Update UI
+                rgb_h, rgb_w = self.current_rgb_image.shape[:2]
+                file_name = os.path.basename(filename)
+                
+                self.file_info.config(text=f"📄 {file_name}\n📐 {rgb_w}×{rgb_h} → 256×256\n💾 {self.FPGA_BYTES:,} bytes")
+                
+                # Update stats
+                self.stat_labels["Image Size"].config(text=f"{rgb_w}×{rgb_h}")
+                self.stat_labels["Data Transferred"].config(text="0 KB")
+                
+                # Display image
+                self.display_original_image()
+                self.update_ui_state()
+                
+            except Exception as e:
+                messagebox.showerror("Image Error", f"Failed to load image:\n{str(e)}")
+                
+    def display_original_image(self):
+        """Display original image with modern styling"""
+        if self.current_rgb_image is not None:
+            rgb_display = cv2.cvtColor(self.current_rgb_image, cv2.COLOR_BGR2RGB)
+            
+            self.ax_original.clear()
+            self.ax_original.imshow(rgb_display)
+            self.ax_original.set_title('Original Image', fontsize=12, color=self.colors['dark'], pad=20)
+            self.ax_original.axis('off')
+            
+            # Clear processed side
+            self.ax_processed.clear()
+            self.ax_processed.text(0.5, 0.5, '⚡\n\nClick "Process with FPGA"\nto generate edge detection',
+                                  ha='center', va='center', transform=self.ax_processed.transAxes,
+                                  fontsize=12, color=self.colors['secondary'])
+            self.ax_processed.set_title('FPGA Edge Detection', fontsize=12, color=self.colors['dark'], pad=20)
+            self.ax_processed.axis('off')
+            
+            self.canvas.draw()
+            
+    def update_ui_state(self):
+        """Update UI state based on current conditions"""
+        can_process = (self.is_connected and 
+                      self.current_gray_image is not None and 
+                      not self.processing)
+        
+        state = tk.NORMAL if can_process else tk.DISABLED
+        self.process_btn.config(state=state)
+        
+    def process_image(self):
+        """Start image processing with modern progress indication"""
+        if self.processing:
+            return
+            
+        self.processing = True
+        self.update_ui_state()
+        
+        # Start processing thread
+        thread = threading.Thread(target=self._process_image_thread, daemon=True)
+        thread.start()
+        
+    def _process_image_thread(self):
+        """Background processing thread"""
+        try:
+            start_time = time.time()
+            height, width = self.current_gray_image.shape
+            total_pixels = width * height
+            
+            # Update progress
+            self.root.after(0, lambda: self.progress_text.config(text="Initializing FPGA communication..."))
+            
+            # Clear buffers
+            self.serial_port.reset_input_buffer()
+            self.serial_port.reset_output_buffer()
+            time.sleep(0.1)
+            
+            # Send data
+            self.root.after(0, lambda: self.progress.config(value=10))
+            self.root.after(0, lambda: self.progress_text.config(text="Transmitting image data..."))
+            
+            bytes_sent = 0
+            for y in range(height):
+                for x in range(width):
+                    pixel_value = int(self.current_gray_image[y, x])
+                    self.serial_port.write(pixel_value.to_bytes(1, 'big'))
+                    bytes_sent += 1
+                    
+                    if bytes_sent % 5000 == 0:
+                        progress = 10 + (bytes_sent / total_pixels) * 40
+                        self.root.after(0, lambda p=progress: self.progress.config(value=p))
+                        
+            # Wait for processing
+            self.root.after(0, lambda: self.progress.config(value=55))
+            self.root.after(0, lambda: self.progress_text.config(text="FPGA processing..."))
+            
+            # Get response
+            done_response = self.serial_port.read(4)
+            if done_response != b'DONE':
+                raise RuntimeError("FPGA communication error")
+                
+            # Receive result
+            self.root.after(0, lambda: self.progress.config(value=60))
+            self.root.after(0, lambda: self.progress_text.config(text="Receiving processed image..."))
+            
+            processed_data = []
+            for i in range(total_pixels):
+                pixel_data = self.serial_port.read(1)
+                if len(pixel_data) != 1:
+                    raise RuntimeError("Data reception error")
+                processed_data.append(pixel_data[0])
+                
+                if i % 5000 == 0:
+                    progress = 60 + (i / total_pixels) * 35
+                    self.root.after(0, lambda p=progress: self.progress.config(value=p))
+                    
+            # Convert result
+            self.processed_image = np.array(processed_data, dtype=np.uint8)
+            self.processed_image = self.processed_image.reshape((height, width))
+            
+            # Update timing stats
+            processing_time = time.time() - start_time
+            data_kb = (total_pixels * 2) / 1024  # Send + receive
+            
+            self.root.after(0, lambda: self.stat_labels["Processing Time"].config(text=f"{processing_time:.1f}s"))
+            self.root.after(0, lambda: self.stat_labels["Data Transferred"].config(text=f"{data_kb:.1f} KB"))
+            
+            self.root.after(0, self._display_results)
+            
+        except Exception as e:
+            error_msg = f"Processing failed: {str(e)}"
+            self.root.after(0, lambda: messagebox.showerror("Processing Error", error_msg))
+            
+        finally:
+            self.processing = False
+            self.root.after(0, self._finish_processing)
+            
+    def _display_results(self):
+        """Display processing results with modern styling"""
+        if self.processed_image is not None:
+            self.ax_processed.clear()
+            self.ax_processed.imshow(self.processed_image, cmap='gray', interpolation='nearest')
+            self.ax_processed.set_title('FPGA Edge Detection', fontsize=12, color=self.colors['dark'], pad=20)
+            self.ax_processed.axis('off')
+            self.canvas.draw()
+            
+    def _finish_processing(self):
+        """Finish processing with success indication"""
+        self.progress.config(value=100)
+        self.progress_text.config(text="✅ Processing complete!")
+        self.status_text.config(text="Processing completed successfully • Ready for next image")
+        self.update_ui_state()
+        
+        # Reset progress after delay
+        self.root.after(3000, lambda: (
+            self.progress.config(value=0),
+            self.progress_text.config(text="Ready")
+        ))
+        
+    def save_results(self):
+        """Save results with modern file dialog"""
+        if self.processed_image is None:
+            messagebox.showwarning("No Results", "No processed image to save!")
+            return
+            
+        filename = filedialog.asksaveasfilename(
+            title="Save Processed Image",
+            defaultextension=".png",
+            filetypes=[("PNG files", "*.png"), ("JPEG files", "*.jpg")]
+        )
+        
+        if filename:
+            try:
+                cv2.imwrite(filename, self.processed_image)
+                messagebox.showinfo("Success", f"Image saved successfully to:\n{filename}")
+            except Exception as e:
+                messagebox.showerror("Save Error", f"Failed to save image:\n{str(e)}")
+                
+    def clear_results(self):
+        """Clear all results and reset interface"""
+        self.current_rgb_image = None
+        self.current_gray_image = None
+        self.processed_image = None
+        
+        self.file_info.config(text="No image selected")
+        self.stat_labels["Image Size"].config(text="Not loaded")
+        self.stat_labels["Processing Time"].config(text="0.0s")
+        self.stat_labels["Data Transferred"].config(text="0 KB")
+        
+        self.show_placeholder()
+        self.update_ui_state()
+        
+    def run(self):
+        """Run the application"""
+        try:
+            self.root.protocol("WM_DELETE_WINDOW", self._on_closing)
+            self.root.mainloop()
+        except KeyboardInterrupt:
+            pass
+        finally:
+            if self.serial_port:
+                self.serial_port.close()
+                
+    def _on_closing(self):
+        """Handle application closing"""
+        if self.processing:
+            if messagebox.askokcancel("Processing Active", 
+                "Image processing is in progress. Force close?"):
+                self.disconnect_from_fpga()
+                self.root.destroy()
+        else:
+            self.disconnect_from_fpga()
+            self.root.destroy()
+
+def main():
+    app = ProfessionalFPGAProcessor()
+    app.run()
+
+if __name__ == "__main__":
+    main()
