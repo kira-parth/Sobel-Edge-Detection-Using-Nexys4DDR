@@ -1,0 +1,269 @@
+
+
+module nexys4_image_processor(
+    input CLK100MHZ,
+    input CPU_RESETN,
+    input UART_TXD_IN,
+    output UART_RXD_OUT
+);
+
+    wire clk, rst;
+    assign clk = CLK100MHZ;
+    assign rst = ~CPU_RESETN;
+    
+    // UART signals
+    wire [7:0] uart_rx_data, uart_tx_data;
+    wire uart_rx_valid, uart_tx_ready, uart_tx_valid;
+    
+    // UART module
+    uart_top uart_inst(
+        .clk(clk), .rst(rst), .rx(UART_TXD_IN), .tx(UART_RXD_OUT),
+        .rx_data(uart_rx_data), .rx_valid(uart_rx_valid),
+        .tx_data(uart_tx_data), .tx_ready(uart_tx_ready), .tx_valid(uart_tx_valid)
+    );
+    
+    // Large image Sobel edge detection processor
+    large_sobel_processor processor(
+        .clk(clk), .rst(rst),
+        .uart_rx_data(uart_rx_data), .uart_rx_valid(uart_rx_valid),
+        .uart_tx_data(uart_tx_data), .uart_tx_ready(uart_tx_ready), .uart_tx_valid(uart_tx_valid)
+    );
+
+endmodule
+
+
+module uart_top(
+    input clk, rst, rx, output tx,
+    output [7:0] rx_data, output rx_valid,
+    input [7:0] tx_data, output tx_ready, input tx_valid
+);
+    parameter CLKS_PER_BIT = 868;
+    uart_rx #(.CLKS_PER_BIT(CLKS_PER_BIT)) rx_inst(.clk(clk), .rst(rst), .rx_serial(rx), .rx_data_valid(rx_valid), .rx_data(rx_data));
+    uart_tx #(.CLKS_PER_BIT(CLKS_PER_BIT)) tx_inst(.clk(clk), .rst(rst), .tx_start(tx_valid), .tx_data(tx_data), .tx_active(), .tx_serial(tx), .tx_done(tx_ready));
+endmodule
+
+module uart_rx #(parameter CLKS_PER_BIT = 868)(
+    input clk, rst, rx_serial, output reg rx_data_valid, output reg [7:0] rx_data
+);
+    localparam IDLE = 0, START = 1, DATA = 2, STOP = 3, CLEANUP = 4;
+    reg [2:0] state; reg [15:0] clk_count; reg [2:0] bit_index; reg [7:0] rx_byte;
+    
+    always @(posedge clk) begin
+        if (rst) begin
+            state <= IDLE; rx_data_valid <= 0; clk_count <= 0; bit_index <= 0; rx_data <= 0; rx_byte <= 0;
+        end else begin
+            case (state)
+                IDLE: begin rx_data_valid <= 0; clk_count <= 0; bit_index <= 0; if (rx_serial == 0) state <= START; end
+                START: begin
+                    if (clk_count == (CLKS_PER_BIT-1)/2) begin
+                        if (rx_serial == 0) begin clk_count <= 0; state <= DATA; end else state <= IDLE;
+                    end else clk_count <= clk_count + 1;
+                end
+                DATA: begin
+                    if (clk_count < CLKS_PER_BIT-1) clk_count <= clk_count + 1;
+                    else begin clk_count <= 0; rx_byte[bit_index] <= rx_serial;
+                        if (bit_index < 7) bit_index <= bit_index + 1; else begin bit_index <= 0; state <= STOP; end
+                    end
+                end
+                STOP: begin
+                    if (clk_count < CLKS_PER_BIT-1) clk_count <= clk_count + 1;
+                    else begin rx_data_valid <= 1; rx_data <= rx_byte; state <= CLEANUP; end
+                end
+                CLEANUP: begin state <= IDLE; rx_data_valid <= 0; end
+                default: state <= IDLE;
+            endcase
+        end
+    end
+endmodule
+
+module uart_tx #(parameter CLKS_PER_BIT = 868)(
+    input clk, rst, tx_start, input [7:0] tx_data,
+    output reg tx_active, tx_serial, tx_done
+);
+    localparam IDLE = 0, START = 1, DATA = 2, STOP = 3, CLEANUP = 4;
+    reg [2:0] state; reg [15:0] clk_count; reg [2:0] bit_index; reg [7:0] tx_data_reg;
+    
+    always @(posedge clk) begin
+        if (rst) begin
+            state <= IDLE; tx_serial <= 1; tx_done <= 0; tx_active <= 0; clk_count <= 0; bit_index <= 0; tx_data_reg <= 0;
+        end else begin
+            case (state)
+                IDLE: begin tx_serial <= 1; tx_done <= 0; tx_active <= 0; clk_count <= 0; bit_index <= 0;
+                    if (tx_start) begin tx_active <= 1; tx_data_reg <= tx_data; state <= START; end end
+                START: begin tx_serial <= 0;
+                    if (clk_count < CLKS_PER_BIT-1) clk_count <= clk_count + 1; else begin clk_count <= 0; state <= DATA; end end
+                DATA: begin tx_serial <= tx_data_reg[bit_index];
+                    if (clk_count < CLKS_PER_BIT-1) clk_count <= clk_count + 1;
+                    else begin clk_count <= 0; if (bit_index < 7) bit_index <= bit_index + 1; else begin bit_index <= 0; state <= STOP; end end end
+                STOP: begin tx_serial <= 1;
+                    if (clk_count < CLKS_PER_BIT-1) clk_count <= clk_count + 1; else begin tx_done <= 1; state <= CLEANUP; end end
+                CLEANUP: begin tx_active <= 0; tx_done <= 1; state <= IDLE; end
+                default: state <= IDLE;
+            endcase
+        end
+    end
+endmodule
+
+
+module large_sobel_processor(
+    input clk, rst,
+    input [7:0] uart_rx_data, input uart_rx_valid,
+    output reg [7:0] uart_tx_data, input uart_tx_ready, output reg uart_tx_valid
+);
+
+    // States
+    localparam RECEIVING = 0, PROCESSING = 1, SENDING_DONE = 2, SENDING_DATA = 3;
+    
+    reg [1:0] state;
+    reg [17:0] rx_count, tx_count;
+    reg [4:0] done_stage;
+    
+    // Large image buffers using Block RAM
+    (* ram_style = "block" *) reg [7:0] image_buffer [0:65535];
+    (* ram_style = "block" *) reg [7:0] edge_buffer [0:65535];
+    
+    // Processing control
+    reg [17:0] process_count;
+    reg [8:0] process_x, process_y;
+    
+    // Sobel computation registers
+    reg signed [10:0] gx, gy;
+    reg [10:0] gradient_mag;
+    reg [7:0] edge_pixel;
+    
+    // 3x3 pixel window for convolution
+    reg [7:0] p00, p01, p02;
+    reg [7:0] p10, p11, p12;
+    reg [7:0] p20, p21, p22;
+    
+    // Image parameters: 256x256 pixels
+    parameter IMG_WIDTH = 256;
+    parameter IMG_HEIGHT = 256;
+    parameter TOTAL_PIXELS = IMG_WIDTH * IMG_HEIGHT;
+    
+    always @(posedge clk) begin
+        if (rst) begin
+            state <= RECEIVING;
+            uart_tx_valid <= 0;
+            rx_count <= 0;
+            tx_count <= 0;
+            done_stage <= 0;
+            process_count <= 0;
+            process_x <= 0;
+            process_y <= 0;
+        end else begin
+            // Clear tx_valid after successful transmission
+            if (uart_tx_valid && uart_tx_ready) begin
+                uart_tx_valid <= 0;
+            end
+            
+            case (state)
+                RECEIVING: begin
+                    // Receive and buffer large image data
+                    if (uart_rx_valid && rx_count < TOTAL_PIXELS) begin
+                        image_buffer[rx_count] <= uart_rx_data;
+                        rx_count <= rx_count + 1;
+                        
+                        // Start processing after receiving all data
+                        if (rx_count == TOTAL_PIXELS - 1) begin
+                            state <= PROCESSING;
+                            process_count <= 0;
+                            process_x <= 0;
+                            process_y <= 0;
+                        end
+                    end
+                end
+                
+                PROCESSING: begin
+                    // Sobel edge detection processing
+                    if (process_count < TOTAL_PIXELS) begin
+                        // Get current position
+                        process_x <= process_count % IMG_WIDTH;
+                        process_y <= process_count / IMG_WIDTH;
+                        
+                        // Handle borders and 3x3 convolution
+                        if (process_x == 0 || process_x >= IMG_WIDTH-1 || 
+                            process_y == 0 || process_y >= IMG_HEIGHT-1) begin
+                            // Border pixels = black (no edges)
+                            edge_pixel <= 8'h00;
+                        end else begin
+                            // Get 3x3 neighborhood from large buffer
+                            p00 <= image_buffer[(process_y-1) * IMG_WIDTH + (process_x-1)];
+                            p01 <= image_buffer[(process_y-1) * IMG_WIDTH + process_x];
+                            p02 <= image_buffer[(process_y-1) * IMG_WIDTH + (process_x+1)];
+                            p10 <= image_buffer[process_y * IMG_WIDTH + (process_x-1)];
+                            p11 <= image_buffer[process_y * IMG_WIDTH + process_x];
+                            p12 <= image_buffer[process_y * IMG_WIDTH + (process_x+1)];
+                            p20 <= image_buffer[(process_y+1) * IMG_WIDTH + (process_x-1)];
+                            p21 <= image_buffer[(process_y+1) * IMG_WIDTH + process_x];
+                            p22 <= image_buffer[(process_y+1) * IMG_WIDTH + (process_x+1)];
+                            
+                            // Sobel X kernel: [[-1,0,1],[-2,0,2],[-1,0,1]]
+                            gx <= (-$signed({3'b000, p00}) + $signed({3'b000, p02}) +
+                                   -2*$signed({3'b000, p10}) + 2*$signed({3'b000, p12}) +
+                                   -$signed({3'b000, p20}) + $signed({3'b000, p22}));
+                            
+                            // Sobel Y kernel: [[-1,-2,-1],[0,0,0],[1,2,1]]
+                            gy <= (-$signed({3'b000, p00}) - 2*$signed({3'b000, p01}) - $signed({3'b000, p02}) +
+                                   $signed({3'b000, p20}) + 2*$signed({3'b000, p21}) + $signed({3'b000, p22}));
+                            
+                            // Compute gradient magnitude: |Gx| + |Gy|
+                            gradient_mag <= (gx[10] ? (~gx + 1) : gx) + (gy[10] ? (~gy + 1) : gy);
+                            
+                            // Apply threshold for clean binary edges
+                            if (gradient_mag > 80)
+                                edge_pixel <= 8'hFF;  // White edge
+                            else
+                                edge_pixel <= 8'h00;  // Black background
+                        end
+                        
+                        // Store edge-detected pixel
+                        edge_buffer[process_count] <= edge_pixel;
+                        
+                        // Move to next pixel
+                        process_count <= process_count + 1;
+                        
+                        // Done processing - start sending
+                        if (process_count == TOTAL_PIXELS - 1) begin
+                            state <= SENDING_DONE;
+                            done_stage <= 0;
+                        end
+                    end
+                end
+                
+                SENDING_DONE: begin
+                    if (!uart_tx_valid) begin
+                        case (done_stage)
+                            0: begin uart_tx_data <= "D"; uart_tx_valid <= 1; done_stage <= 1; end
+                            1: begin uart_tx_data <= "O"; uart_tx_valid <= 1; done_stage <= 2; end
+                            2: begin uart_tx_data <= "N"; uart_tx_valid <= 1; done_stage <= 3; end
+                            3: begin uart_tx_data <= "E"; uart_tx_valid <= 1; done_stage <= 4; end
+                            4: begin
+                                state <= SENDING_DATA;
+                                tx_count <= 0;
+                            end
+                        endcase
+                    end
+                end
+                
+                SENDING_DATA: begin
+                    if (!uart_tx_valid && tx_count < TOTAL_PIXELS) begin
+                        // Send edge-detected image data
+                        uart_tx_data <= edge_buffer[tx_count];
+                        uart_tx_valid <= 1;
+                        tx_count <= tx_count + 1;
+                        
+                        if (tx_count == TOTAL_PIXELS - 1) begin
+                            // Reset for next image
+                            state <= RECEIVING;
+                            rx_count <= 0;
+                        end
+                    end
+                end
+                
+                default: state <= RECEIVING;
+            endcase
+        end
+    end
+
+endmodule
